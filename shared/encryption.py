@@ -14,19 +14,24 @@ def generate_keystream(key: bytes, nonce: bytes, length: int) -> bytes:
     return keystream[:length]
 
 def cypher_encrypt(plaintext: str, key: bytes) -> bytes:
-    """Encrypts a plaintext string using a stream cipher with a random nonce.
+    """
+    Encrypts a plaintext string using a stream cipher with a random nonce.
     
-    The output is: nonce || ciphertext.
+    The output is: nonce || ciphertext || MAC
+    
     Debug information (nonce, plaintext, ciphertext, and MAC) is printed.
     """
     # Generate a random 16-byte nonce.
     nonce = os.urandom(16)
     plaintext_bytes = plaintext.encode('utf-8')
+    
     # Generate a keystream based on the nonce and key.
     keystream = generate_keystream(key, nonce, len(plaintext_bytes))
+    
     # Encrypt the plaintext by XORing with the keystream.
     ciphertext = bytes([p ^ k for p, k in zip(plaintext_bytes, keystream)])
-    # Compute a MAC over the ciphertext (using HMAC-SHA256 with the key).
+    
+    # Compute a MAC (message digest) over the ciphertext using HMAC-SHA256 with the key.
     mac = hmac.new(key, ciphertext, hashlib.sha256).digest()
     
     # Print debug information.
@@ -37,42 +42,56 @@ def cypher_encrypt(plaintext: str, key: bytes) -> bytes:
     print("Ciphertext:", ciphertext.hex())
     print("MAC:", mac.hex())
     
-    # Return the nonce concatenated with the ciphertext.
-    return nonce + ciphertext
+    # Return the concatenation: nonce || ciphertext || mac.
+    return nonce + ciphertext + mac
 
 def cypher_decrypt(cipher: bytes, key: bytes) -> str:
-    """Decrypts data that was encrypted using cypher_encrypt.
-    
-    Expects the first 16 bytes to be the nonce. Prints debug information.
     """
-    # Extract nonce (first 16 bytes) and ciphertext.
+    Decrypts data that was encrypted using cypher_encrypt.
+    
+    Expects the input format: nonce (16 bytes) || ciphertext || MAC (32 bytes).
+    Prints debug information and verifies the MAC before decryption.
+    """
+    if len(cipher) < 16 + 32:
+        raise ValueError("Input cipher is too short to contain nonce and MAC.")
+    
+    # Extract nonce, MAC, and ciphertext.
     nonce = cipher[:16]
-    ciphertext = cipher[16:]
+    mac_provided = cipher[-32:]
+    ciphertext = cipher[16:-32]
+    
     # Recreate the keystream for the ciphertext.
     keystream = generate_keystream(key, nonce, len(ciphertext))
+    
     # Decrypt the ciphertext by XORing with the keystream.
     plaintext_bytes = bytes([c ^ k for c, k in zip(ciphertext, keystream)])
     plaintext = plaintext_bytes.decode('utf-8')
-    # Compute a MAC over the ciphertext for debug purposes.
-    mac = hmac.new(key, ciphertext, hashlib.sha256).digest()
+    
+    # Compute the MAC over the ciphertext for verification.
+    mac_computed = hmac.new(key, ciphertext, hashlib.sha256).digest()
     
     # Print debug information.
-    print("\nDecryption Debug Info:")
+    print("\n------------------------------------------------------------------------------------------------------------")
+    print("Decryption Debug Info:")
     print("Nonce:", nonce.hex())
     print("Ciphertext:", ciphertext.hex())
     print("Plaintext:", plaintext)
-    print("MAC:", mac.hex())
-
+    print("MAC Provided:", mac_provided.hex())
+    print("MAC Computed:", mac_computed.hex())
+    
+    # Verify that the provided MAC matches the computed MAC.
+    if not hmac.compare_digest(mac_provided, mac_computed):
+        raise ValueError("MAC verification failed! The message's integrity cannot be verified.")
+    
     return plaintext
 
-# These are the new encryption and decryption functions that will be used by your client and server.
 def encrypt_message(message: str, encryption_key: bytes) -> bytes:
     return cypher_encrypt(message, encryption_key)
 
 def decrypt_message(cipher: bytes, encryption_key: bytes) -> str:
     return cypher_decrypt(cipher, encryption_key)
 
-# The secure audit functions remain available (they use a simple XOR-based method).
+# The secure audit functions.
 def secure_audit_key():
     SECRET_KEY = b"audit_secret_key"
     return hashlib.sha256(SECRET_KEY).digest()

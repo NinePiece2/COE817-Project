@@ -1,10 +1,10 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import socket, json, base64, os
 from shared.authentication import client_process_key_distribution, derive_keys, generate_mac
 from shared.encryption import encrypt_message, decrypt_message
 
-# Global color constants (tunable)
+# Global color constants
 BG_COLOR = "#121212"               # Light blue background
 BUTTON_PRIMARY_BG = "#4CAF50"      # Primary button background
 BUTTON_SECONDARY_BG = "#4CAF50"    # Secondary button background
@@ -14,7 +14,7 @@ BUTTON_LOGOUT_BG = "#757575"       # Logout button background
 BUTTON_FG = "white"                # Button foreground (text) color
 LABEL_FONT = ("Arial", 18)
 DEFAULT_FONT = ("Arial", 18)
-LABEL_FONT_COLOR = "white"       # Label text color
+LABEL_FONT_COLOR = "white"         # Label text color
 
 # Helper function to send a JSON request to the server and receive a response.
 def send_request(request):
@@ -35,8 +35,29 @@ class ATMClientApp:
         # Set the window size to be bigger
         self.master.geometry("800x600")
         self.current_user = None
-        self.session_keys = None  # Holds encryption and MAC keys after secure channel establishment
-        self.master.title("SecureBank ATM")
+        self.session_keys = None  # Holds encryption and MAC keys
+        self.master.title("Bank ATM")
+        
+        ico_path = "images/favicon.ico"
+        if os.path.exists(ico_path):
+            try:
+                self.master.iconbitmap(ico_path)
+            except Exception as e:
+                print("iconbitmap failed:", e)
+        else:
+            print("favicon.ico not found.")
+
+        png_path = "images/favicon.png"
+        if os.path.exists(png_path):
+            try:
+                icon = tk.PhotoImage(file=png_path)
+                self.master.iconphoto(True, icon)
+                self.master.icon_image = icon 
+            except Exception as e:
+                print("iconphoto failed:", e)
+        else:
+            print("favicon.png not found.")
+        
         self.master.configure(bg=BG_COLOR)
         self.main_frame = tk.Frame(master, bg=BG_COLOR)
         self.main_frame.pack(padx=20, pady=20)
@@ -66,6 +87,7 @@ class ATMClientApp:
                   command=lambda: self.show_frame(self.register_frame),
                   bg=BUTTON_SECONDARY_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
             .grid(row=4, column=0, columnspan=2)
+        
         # Bind Enter key on entries to trigger login.
         self.login_username_entry.bind("<Return>", lambda event: self.login())
         self.login_password_entry.bind("<Return>", lambda event: self.login())
@@ -93,6 +115,7 @@ class ATMClientApp:
                   command=lambda: self.show_frame(self.login_frame),
                   bg=BUTTON_SECONDARY_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
             .grid(row=5, column=0, columnspan=2)
+        
         # Bind Enter key on entries to trigger register.
         self.reg_fullname_entry.bind("<Return>", lambda event: self.register())
         self.reg_username_entry.bind("<Return>", lambda event: self.register())
@@ -100,7 +123,8 @@ class ATMClientApp:
 
     def create_menu_frame(self):
         self.menu_frame = tk.Frame(self.main_frame, bg=BG_COLOR)
-        # Create a dynamic welcome label that will be updated upon login.
+
+        # dynamic welcome label
         self.welcome_label = tk.Label(self.menu_frame, text="Welcome", font=LABEL_FONT, bg=BG_COLOR, fg=LABEL_FONT_COLOR)
         self.welcome_label.grid(row=0, column=0, columnspan=2, pady=10)
         tk.Button(self.menu_frame, text="Deposit", width=15, command=self.deposit_window,
@@ -112,9 +136,12 @@ class ATMClientApp:
         tk.Button(self.menu_frame, text="Balance Inquiry", width=15, command=self.balance_inquiry,
                   bg=BUTTON_TERTIARY_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
             .grid(row=2, column=0, pady=5)
+        tk.Button(self.menu_frame, text="Transaction History", width=15, command=self.transaction_history,
+                  bg=BUTTON_SECONDARY_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
+            .grid(row=2, column=1, pady=5)
         tk.Button(self.menu_frame, text="Logout", width=15, command=self.logout,
                   bg=BUTTON_LOGOUT_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
-            .grid(row=2, column=1, pady=5)
+            .grid(row=3, column=0, pady=5)
 
     def clear_entries(self, frame):
         for widget in frame.winfo_children():
@@ -125,6 +152,7 @@ class ATMClientApp:
         # Clear text fields in both login and register frames
         self.clear_entries(self.login_frame)
         self.clear_entries(self.register_frame)
+
         # Hide all frames and show the selected one
         for child in self.main_frame.winfo_children():
             child.pack_forget()
@@ -141,6 +169,7 @@ class ATMClientApp:
             messagebox.showinfo("Success", f"{response.get('message')}\nWelcome, {full_name}!")
             # Update the welcome label with the full name
             self.welcome_label.config(text=f"Welcome, {full_name}!")
+
             # Establish secure channel.
             client_nonce = os.urandom(16)
             request_sc = {"action": "establish_secure_channel", "data": {"username": username,
@@ -257,6 +286,66 @@ class ATMClientApp:
             encrypted_result = base64.b64decode(response.get("encrypted_result"))
             result = decrypt_message(encrypted_result, encryption_key)
             messagebox.showinfo("Balance Inquiry", result)
+    
+    def transaction_history(self):
+        """Requests the transaction history over the network and displays it in the main window with a running balance column."""
+        request = {"action": "transaction_history", "data": {"username": self.current_user}}
+        response = send_request(request)
+        if response.get("status") != "success":
+            messagebox.showerror("Error", response.get("message"))
+            return
+
+        history = response.get("history", {})
+        entries = history.get("entries", [])
+        
+        # Sort entries by timestamp
+        entries.sort(key=lambda x: x[0])
+        
+        # Compute running balance.
+        running_balance = 0.0
+        new_entries = []
+        for timestamp, action in entries:
+            if action.startswith("Deposited $"):
+                try:
+                    amount_str = action[len("Deposited $"):].split()[0]
+                    amount = float(amount_str)
+                    running_balance += amount
+                except Exception as e:
+                    print("Error parsing deposit amount:", e)
+            elif action.startswith("Withdrew $"):
+                try:
+                    amount_str = action[len("Withdrew $"):].split()[0]
+                    amount = float(amount_str)
+                    running_balance -= amount
+                except Exception as e:
+                    print("Error parsing withdrawal amount:", e)
+            new_entries.append((timestamp, action, f"${running_balance:.2f}"))
+        
+        # Create or update a dedicated history frame within the main window.
+        self.history_frame = tk.Frame(self.main_frame, bg=BG_COLOR)
+        
+        header = tk.Label(self.history_frame, text="Transaction History", font=LABEL_FONT, bg=BG_COLOR, fg=LABEL_FONT_COLOR)
+        header.pack(pady=10)
+        
+        # Create a Treeview widget with three columns: Timestamp, Action, and Balance.
+        tree = ttk.Treeview(self.history_frame, columns=("timestamp", "action", "balance"), show="headings")
+        tree.heading("timestamp", text="Timestamp")
+        tree.heading("action", text="Action")
+        tree.heading("balance", text="Balance")
+        tree.column("timestamp", width=200, anchor="center")
+        tree.column("action", width=280, anchor="center")
+        tree.column("balance", width=100, anchor="center")
+        
+        for timestamp, action, balance in new_entries:
+            tree.insert("", "end", values=(timestamp, action, balance))
+        tree.pack(expand=True, fill="both", padx=10, pady=10)
+        
+        # Add a back button to return to the main menu.
+        back_btn = tk.Button(self.history_frame, text="Back", command=lambda: self.show_frame(self.menu_frame),
+                            bg=BUTTON_PRIMARY_BG, fg=BUTTON_FG, font=DEFAULT_FONT)
+        back_btn.pack(pady=10)
+        
+        self.show_frame(self.history_frame)
 
     def logout(self):
         self.current_user = None

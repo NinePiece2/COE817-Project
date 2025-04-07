@@ -80,6 +80,12 @@ class ClientHandler(threading.Thread):
             return {"status": "success",
                     "encrypted_result": base64.b64encode(encrypted_result).decode('utf-8'),
                     "result_mac": base64.b64encode(result_mac).decode('utf-8')}
+        elif action == "transaction_history":
+            username = data.get("username")
+            if not username:
+                return {"status": "error", "message": "Missing username"}
+            history = self.bank_server.get_transaction_history(username)
+            return {"status": "success", "history": history}
         else:
             return {"status": "error", "message": "Unknown action"}
 

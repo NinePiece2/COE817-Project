@@ -49,7 +49,8 @@ class BankServer:
         if username in self.accounts:
             return False, "Username already exists."
         hashed = hash_password(password)
-        # Save the password under the key "password_hash" and store the full name.
+
+        # Save the data in the accounts dictionary/json file
         self.accounts[username] = {"password_hash": hashed, "balance": 0.0, "full_name": full_name}
         self.save_accounts()
         self.log_audit(username, "Registered new account")
@@ -112,3 +113,49 @@ class BankServer:
         encrypted_result = encrypt_message(result, encryption_key)
         result_mac = generate_mac(encrypted_result, mac_key)
         return encrypted_result, result_mac, None
+    
+    def get_transaction_history(self, username):
+        """
+        Reads the audit log (self.audit_log), decrypts each entry using the secure audit key,
+        filters entries for the specified username that relate to deposits or withdrawals,
+        and computes a final balance.
+        Returns a dictionary with "entries" (a list of [timestamp, action] pairs)
+        and "final_balance" (a float).
+        """
+        from shared.encryption import secure_decrypt_audit
+        entries = []
+        final_balance = 0.0
+
+        for entry in self.audit_log:
+            try:
+                decrypted = secure_decrypt_audit(entry)
+                # Expected format: "username | action | timestamp"
+                parts = decrypted.split(" | ")
+                if len(parts) != 3:
+                    continue
+                user, action, timestamp = parts
+                if user == username:
+                    # Only include deposit and withdraw actions.
+                    if action.startswith("Deposited $") or action.startswith("Withdrew $"):
+                        entries.append((timestamp, action))
+                        
+                        if action.startswith("Deposited $"):
+                            try:
+                                # Extract the amount from a string
+                                amount_str = action[len("Deposited $"):].split()[0]
+                                amount = float(amount_str)
+                                final_balance += amount
+                            except:
+                                pass
+                        elif action.startswith("Withdrew $"):
+                            try:
+                                amount_str = action[len("Withdrew $"):].split()[0]
+                                amount = float(amount_str)
+                                final_balance -= amount
+                            except:
+                                pass
+            except Exception as e:
+                # Skip entries that cannot be decrypted or processed.
+                continue
+
+        return {"entries": entries, "final_balance": final_balance}

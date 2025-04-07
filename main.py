@@ -24,13 +24,11 @@ def main():
 
     # Create the main Tkinter window and additional client windows as needed.
     root = tk.Tk()
-    root.title("SecureBank Client - Main Window")
     app_instances = []
     app = ATMClientApp(root)
     app_instances.append(app)
     for i in range(1, num_clients):
         new_window = tk.Toplevel(root)
-        new_window.title(f"SecureBank Client Instance {i+1}")
         app_instance = ATMClientApp(new_window)
         app_instances.append(app_instance)
 
