@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 import socket, json, base64, os
 from shared.authentication import client_process_key_distribution, derive_keys, generate_mac
 from shared.encryption import encrypt_message, decrypt_message
+import sys
 
 # Global color constants
 BG_COLOR = "#121212"               # Light blue background
@@ -37,26 +38,25 @@ class ATMClientApp:
         self.current_user = None
         self.session_keys = None  # Holds encryption and MAC keys
         self.master.title("Bank ATM")
-        
+
         ico_path = "images/favicon.ico"
         if os.path.exists(ico_path):
-            try:
-                self.master.iconbitmap(ico_path)
-            except Exception as e:
-                print("iconbitmap failed:", e)
+            self.master.iconbitmap(ico_path)
         else:
-            print("favicon.ico not found.")
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.abspath(".")
 
-        png_path = "images/favicon.png"
-        if os.path.exists(png_path):
+            icon_path = os.path.join(base_path, "favicon.ico")
+
             try:
-                icon = tk.PhotoImage(file=png_path)
-                self.master.iconphoto(True, icon)
-                self.master.icon_image = icon 
+                self.master.iconbitmap(icon_path)
             except Exception as e:
-                print("iconphoto failed:", e)
-        else:
-            print("favicon.png not found.")
+                print(f"Error setting icon: {e}")
+
+
+        
         
         self.master.configure(bg=BG_COLOR)
         self.main_frame = tk.Frame(master, bg=BG_COLOR)
