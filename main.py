@@ -7,11 +7,9 @@ from server.bankServer import BankServer
 from server.networkServer import run_network_server
 from client.clientUI import ATMClientApp
 
-# We'll add a new module for the server UI (see below)
 from server.serverUI import ServerUI
 
 def start_network_server(bank_server, host, port, debug_callback=None):
-    # Optionally, you can pass a debug_callback that the network server or BankServer uses to log messages.
     run_network_server(bank_server, host=host, port=port)
 
 def main():
