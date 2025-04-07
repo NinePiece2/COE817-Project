@@ -27,6 +27,7 @@ jobs:
         --icon=images/favicon.ico
         --name "Bank ATM"
         --add-data "images/favicon.ico;."
+        main.py
     
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
