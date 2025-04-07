@@ -21,25 +21,29 @@ jobs:
     - name: Install PyInstaller
       run: pip install pyinstaller
 
+    - name: Extract version
+      id: vars
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
     - name: Build EXE with PyInstaller
       run: >
         pyinstaller --onefile --windowed
         --icon=images/favicon.ico
-        --name "Bank_ATM"
+        --name "Bank_ATM_${{ env.VERSION }}"
         --add-data "images/favicon.ico;."
         main.py
-    
+
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: bank-atm-exe
-        path: dist/Bank_ATM.exe
+        name: bank-atm-${{ env.VERSION }}
+        path: dist/Bank_ATM_${{ env.VERSION }}.exe
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        name: Release ${{ github.ref_name }}
-        tag_name: ${{ github.ref_name }}
-        files: dist/Bank_ATM.exe
+        name: Release ${{ env.VERSION }}
+        tag_name: ${{ env.VERSION }}
+        files: dist/Bank_ATM_${{ env.VERSION }}.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
