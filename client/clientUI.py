@@ -116,7 +116,16 @@ class ATMClientApp:
                   bg=BUTTON_LOGOUT_BG, fg=BUTTON_FG, font=DEFAULT_FONT)\
             .grid(row=2, column=1, pady=5)
 
+    def clear_entries(self, frame):
+        for widget in frame.winfo_children():
+            if isinstance(widget, tk.Entry):
+                widget.delete(0, tk.END)
+
     def show_frame(self, frame):
+        # Clear text fields in both login and register frames
+        self.clear_entries(self.login_frame)
+        self.clear_entries(self.register_frame)
+        # Hide all frames and show the selected one
         for child in self.main_frame.winfo_children():
             child.pack_forget()
         frame.pack()
