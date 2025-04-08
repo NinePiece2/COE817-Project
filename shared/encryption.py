@@ -1,97 +1,85 @@
 import os
 import hashlib
 import hmac
+import logging
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
-def generate_keystream(key: bytes, nonce: bytes, length: int) -> bytes:
-    """Generates a keystream of the desired length using SHA-256 in counter mode."""
-    keystream = b""
-    counter = 0
-    while len(keystream) < length:
-        counter_bytes = counter.to_bytes(4, byteorder="big")
-        block = hashlib.sha256(nonce + key + counter_bytes).digest()
-        keystream += block
-        counter += 1
-    return keystream[:length]
+logger = logging.getLogger(__name__)
+logger.propagate = True
+BLOCK_SIZE = AES.block_size  # typically 16 bytes
 
-def cypher_encrypt(plaintext: str, key: bytes) -> bytes:
+def aes_encrypt(plaintext: str, key: bytes) -> bytes:
     """
-    Encrypts a plaintext string using a stream cipher with a random nonce.
+    Encrypts a plaintext string using AES in CBC mode.
     
-    The output is: nonce || ciphertext || MAC
+    Process:
+    - Pad the plaintext using PKCS7.
+    - Generate a random 16-byte IV.
+    - Encrypt the padded plaintext with AES-CBC.
+    - Compute an HMAC-SHA256 over the ciphertext.
     
-    Debug information (nonce, plaintext, ciphertext, and MAC) is printed.
+    Returns: IV || ciphertext || MAC.
+    Debug info is sent to the logger.
     """
-    # Generate a random 16-byte nonce.
-    nonce = os.urandom(16)
     plaintext_bytes = plaintext.encode('utf-8')
-    
-    # Generate a keystream based on the nonce and key.
-    keystream = generate_keystream(key, nonce, len(plaintext_bytes))
-    
-    # Encrypt the plaintext by XORing with the keystream.
-    ciphertext = bytes([p ^ k for p, k in zip(plaintext_bytes, keystream)])
-    
-    # Compute a MAC (message digest) over the ciphertext using HMAC-SHA256 with the key.
+    padded_plaintext = pad(plaintext_bytes, BLOCK_SIZE)
+    iv = os.urandom(BLOCK_SIZE)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    ciphertext = cipher.encrypt(padded_plaintext)
     mac = hmac.new(key, ciphertext, hashlib.sha256).digest()
-    
-    # Print debug information.
-    print("\n------------------------------------------------------------------------------------------------------------")
-    print("Encryption Debug Info:")
-    print("Nonce:", nonce.hex())
-    print("Plaintext:", plaintext)
-    print("Ciphertext:", ciphertext.hex())
-    print("MAC:", mac.hex())
-    
-    # Return the concatenation: nonce || ciphertext || mac.
-    return nonce + ciphertext + mac
 
-def cypher_decrypt(cipher: bytes, key: bytes) -> str:
+    logger.debug("------------------------------------------------------------------------")
+    logger.debug("AES Encryption Debug Info:")
+    logger.debug("IV: %s", iv.hex())
+    logger.debug("Plaintext: %s", plaintext)
+    logger.debug("Padded Plaintext: %s", padded_plaintext.hex())
+    logger.debug("Ciphertext: %s", ciphertext.hex())
+    logger.debug("MAC: %s", mac.hex())
+
+    return iv + ciphertext + mac
+
+def aes_decrypt(data: bytes, key: bytes) -> str:
     """
-    Decrypts data that was encrypted using cypher_encrypt.
+    Decrypts data that was encrypted using aes_encrypt.
     
-    Expects the input format: nonce (16 bytes) || ciphertext || MAC (32 bytes).
-    Prints debug information and verifies the MAC before decryption.
+    Expects the input format: IV (16 bytes) || ciphertext || MAC (32 bytes).
+    Verifies the MAC before decrypting and unpadding.
+    Debug info is sent to the logger.
     """
-    if len(cipher) < 16 + 32:
-        raise ValueError("Input cipher is too short to contain nonce and MAC.")
+    if len(data) < BLOCK_SIZE + 32:
+        raise ValueError("Input data is too short to contain IV and MAC.")
     
-    # Extract nonce, MAC, and ciphertext.
-    nonce = cipher[:16]
-    mac_provided = cipher[-32:]
-    ciphertext = cipher[16:-32]
-    
-    # Recreate the keystream for the ciphertext.
-    keystream = generate_keystream(key, nonce, len(ciphertext))
-    
-    # Decrypt the ciphertext by XORing with the keystream.
-    plaintext_bytes = bytes([c ^ k for c, k in zip(ciphertext, keystream)])
-    plaintext = plaintext_bytes.decode('utf-8')
-    
-    # Compute the MAC over the ciphertext for verification.
+    iv = data[:BLOCK_SIZE]
+    mac_provided = data[-32:]
+    ciphertext = data[BLOCK_SIZE:-32]
     mac_computed = hmac.new(key, ciphertext, hashlib.sha256).digest()
     
-    # Print debug information.
-    print("\n------------------------------------------------------------------------------------------------------------")
-    print("Decryption Debug Info:")
-    print("Nonce:", nonce.hex())
-    print("Ciphertext:", ciphertext.hex())
-    print("Plaintext:", plaintext)
-    print("MAC Provided:", mac_provided.hex())
-    print("MAC Computed:", mac_computed.hex())
+    logger.debug("AES Decryption Debug Info:")
+    logger.debug("IV: %s", iv.hex())
+    logger.debug("Ciphertext: %s", ciphertext.hex())
+    logger.debug("MAC Provided: %s", mac_provided.hex())
+    logger.debug("MAC Computed: %s", mac_computed.hex())
     
-    # Verify that the provided MAC matches the computed MAC.
     if not hmac.compare_digest(mac_provided, mac_computed):
         raise ValueError("MAC verification failed! The message's integrity cannot be verified.")
+    
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    padded_plaintext = cipher.decrypt(ciphertext)
+    plaintext_bytes = unpad(padded_plaintext, BLOCK_SIZE)
+    plaintext = plaintext_bytes.decode('utf-8')
+    
+    logger.debug("Decrypted Plaintext: %s", plaintext)
     
     return plaintext
 
 def encrypt_message(message: str, encryption_key: bytes) -> bytes:
-    return cypher_encrypt(message, encryption_key)
+    return aes_encrypt(message, encryption_key)
 
-def decrypt_message(cipher: bytes, encryption_key: bytes) -> str:
-    return cypher_decrypt(cipher, encryption_key)
+def decrypt_message(data: bytes, encryption_key: bytes) -> str:
+    return aes_decrypt(data, encryption_key)
 
-# The secure audit functions.
+#  Secure audit functions
 def secure_audit_key():
     SECRET_KEY = b"audit_secret_key"
     return hashlib.sha256(SECRET_KEY).digest()

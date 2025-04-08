@@ -23,10 +23,13 @@ jobs:
 
     - name: Build EXE with PyInstaller
       run: >
-        pyinstaller --onefile --windowed
-        --icon=images/favicon.ico
-        --name "Bank_ATM_${{ github.ref_name }}"
-        --add-data "images/favicon.ico;."
+       pyinstaller --onefile --windowed \
+        --icon=images/favicon.ico \
+        --name "Bank_ATM_${{ github.ref_name }}" \
+        --add-data "images/favicon.ico;." \
+        --hidden-import=Crypto \
+        --hidden-import=Crypto.Cipher \
+        --hidden-import=Crypto.Util.Padding \
         main.py
     
     - name: Upload build artifact

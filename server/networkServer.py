@@ -1,8 +1,12 @@
 import socket
 import threading
 import json
-from server.bankServer import BankServer
 import base64
+import logging
+from server.bankServer import BankServer
+
+logger = logging.getLogger(__name__)
+logger.propagate = True
 
 class ClientHandler(threading.Thread):
     def __init__(self, conn, addr, bank_server):
@@ -22,7 +26,7 @@ class ClientHandler(threading.Thread):
                 response_data = json.dumps(response).encode('utf-8')
                 self.conn.sendall(response_data)
             except Exception as e:
-                print("Error handling request:", e)
+                logger.error("Error handling request from %s: %s", self.addr, e)
 
     def recv_all(self):
         chunks = []
@@ -93,7 +97,7 @@ def run_network_server(bank_server, host="0.0.0.0", port=15000):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
     server_socket.listen(5)
-    print(f"Network server listening on {host}:{port}")
+    logger.info("Network server listening on %s:%s", host, port)
     while True:
         conn, addr = server_socket.accept()
         handler = ClientHandler(conn, addr, bank_server)
