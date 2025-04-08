@@ -20,6 +20,9 @@ jobs:
 
     - name: Install PyInstaller
       run: pip install pyinstaller
+    
+    - name: Install PyCryptodome
+      run: pip install pycryptodome
 
     - name: Build EXE with PyInstaller
       run: >
